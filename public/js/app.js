@@ -83,32 +83,44 @@ function expenseTracker() {
       this.loadTheme();
     },    // Check authentication status on app load (no timeout, persistent until logout)
     async checkAuth() {
+      console.log("Checking authentication status...");
+      
       if (!this.authToken) {
+        console.log("No token found, user not authenticated");
         this.isAuthenticated = false;
         return;
       }
 
+      console.log("Token found, verifying with server...");
       try {
         const response = await fetch("/api/auth/status", {
           headers: {
             "X-Auth-Token": this.authToken
           }
         });
+        
+        if (!response.ok) {
+          console.log("Auth check response not ok:", response.status);
+          this.isAuthenticated = false;
+          return;
+        }
+        
         const data = await response.json();
+        console.log("Auth check response:", data);
 
         if (data.authenticated) {
           this.isAuthenticated = true;
           console.log("Authentication verified - token is valid");
-          await this.loadData();
+          await this.loadDataAfterLogin();
         } else {
           // Only clear token if server says it's invalid, not because of timeout
-          console.log("Token invalid, clearing authentication");
+          console.log("Token invalid according to server, clearing authentication");
           this.authToken = null;
           localStorage.removeItem('authToken');
           this.isAuthenticated = false;
         }
       } catch (error) {
-        console.error("Auth check failed:", error);
+        console.error("Auth check network error:", error);
         // Don't clear token on network errors, just set as not authenticated for now
         this.isAuthenticated = false;
       }
@@ -131,8 +143,10 @@ function expenseTracker() {
           localStorage.setItem('authToken', data.token);
           this.isAuthenticated = true;
           this.password = "";
-          console.log("Login successful - no timeout, persistent until logout");
-          await this.loadData();
+          console.log("Login successful - token:", data.token.substring(0, 20) + "...");
+          
+          // Load data directly without requireAuth check since we just logged in
+          await this.loadDataAfterLogin();
           notifications.success("Login berhasil! Token akan tetap aktif hingga logout.");
         } else {
           this.error = data.error || "Login failed";
@@ -254,6 +268,24 @@ function expenseTracker() {
 
       this.calculateSummaries();
       this.updateChart();
+    },
+
+    async loadDataAfterLogin() {
+      console.log("Loading data after successful login...");
+      try {
+        await Promise.all([
+          this.loadExpenses(),
+          this.loadCategories(),
+          this.loadSources(),
+          this.loadBudget(),
+        ]);
+
+        this.calculateSummaries();
+        this.updateChart();
+        console.log("Data loaded successfully after login");
+      } catch (error) {
+        console.error("Error loading data after login:", error);
+      }
     },
 
     async loadExpenses() {
