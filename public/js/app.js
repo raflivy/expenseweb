@@ -2,7 +2,7 @@ function expenseTracker() {
   return {
     // Authentication
     isAuthenticated: false,
-    authToken: localStorage.getItem('authToken') || null,
+    authToken: localStorage.getItem("authToken") || null,
     password: "",
     loading: false,
     error: "",
@@ -84,7 +84,7 @@ function expenseTracker() {
     },    // Check authentication status on app load (no timeout, persistent until logout)
     async checkAuth() {
       console.log("Checking authentication status...");
-      
+
       if (!this.authToken) {
         console.log("No token found, user not authenticated");
         this.isAuthenticated = false;
@@ -95,16 +95,22 @@ function expenseTracker() {
       try {
         const response = await fetch("/api/auth/status", {
           headers: {
-            "X-Auth-Token": this.authToken
-          }
+            "X-Auth-Token": this.authToken,
+          },
         });
-        
+
         if (!response.ok) {
           console.log("Auth check response not ok:", response.status);
+          // If it's 401, clear the token
+          if (response.status === 401) {
+            console.log("Token invalid, clearing authentication");
+            this.authToken = null;
+            localStorage.removeItem("authToken");
+          }
           this.isAuthenticated = false;
           return;
         }
-        
+
         const data = await response.json();
         console.log("Auth check response:", data);
 
@@ -114,9 +120,11 @@ function expenseTracker() {
           await this.loadDataAfterLogin();
         } else {
           // Only clear token if server says it's invalid, not because of timeout
-          console.log("Token invalid according to server, clearing authentication");
+          console.log(
+            "Token invalid according to server, clearing authentication"
+          );
           this.authToken = null;
-          localStorage.removeItem('authToken');
+          localStorage.removeItem("authToken");
           this.isAuthenticated = false;
         }
       } catch (error) {
@@ -131,23 +139,30 @@ function expenseTracker() {
       this.loading = true;
       this.error = "";
 
-      try {        const response = await fetch("/api/login", {
+      try {
+        const response = await fetch("/api/login", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ password: this.password }),
         });
-        const data = await response.json();        if (response.ok && data.success) {
+        const data = await response.json();
+        if (response.ok && data.success) {
           this.authToken = data.token;
-          localStorage.setItem('authToken', data.token);
+          localStorage.setItem("authToken", data.token);
           this.isAuthenticated = true;
           this.password = "";
-          console.log("Login successful - token:", data.token.substring(0, 20) + "...");
-          
+          console.log(
+            "Login successful - token:",
+            data.token.substring(0, 20) + "..."
+          );
+
           // Load data directly without requireAuth check since we just logged in
           await this.loadDataAfterLogin();
-          notifications.success("Login berhasil! Token akan tetap aktif hingga logout.");
+          notifications.success(
+            "Login berhasil! Token akan tetap aktif hingga logout."
+          );
         } else {
           this.error = data.error || "Login failed";
           notifications.error(this.error);
@@ -160,14 +175,15 @@ function expenseTracker() {
       } finally {
         this.loading = false;
       }
-    },    async logout() {
+    },
+    async logout() {
       if (this.authToken) {
         try {
           await fetch("/api/logout", {
             method: "POST",
             headers: {
-              "X-Auth-Token": this.authToken
-            }
+              "X-Auth-Token": this.authToken,
+            },
           });
           console.log("Logout successful");
         } catch (error) {
@@ -175,7 +191,7 @@ function expenseTracker() {
         }
       }
       this.authToken = null;
-      localStorage.removeItem('authToken');
+      localStorage.removeItem("authToken");
       this.isAuthenticated = false;
       this.expenses = [];
       this.categories = [];
@@ -268,11 +284,10 @@ function expenseTracker() {
 
       this.calculateSummaries();
       this.updateChart();
-    },
-
-    async loadDataAfterLogin() {
+    },    async loadDataAfterLogin() {
       console.log("Loading data after successful login...");
       try {
+        console.log("Starting to load all data...");
         await Promise.all([
           this.loadExpenses(),
           this.loadCategories(),
@@ -280,25 +295,37 @@ function expenseTracker() {
           this.loadBudget(),
         ]);
 
+        console.log("All data loaded, calculating summaries...");
         this.calculateSummaries();
         this.updateChart();
         console.log("Data loaded successfully after login");
+        
+        // Verify we're still authenticated after loading data
+        if (!this.isAuthenticated) {
+          console.error("Authentication lost during data loading - this shouldn't happen");
+          notifications.error("Sesi terputus, silakan login kembali");
+        }
       } catch (error) {
         console.error("Error loading data after login:", error);
+        notifications.error("Gagal memuat data, silakan refresh halaman");
       }
-    },
-
-    async loadExpenses() {
+    },    async loadExpenses() {
+      console.log("Loading expenses...");
       const response = await this.apiCall("/api/expenses");
       if (response && response.ok) {
         this.expenses = await response.json();
+        console.log("Expenses loaded:", this.expenses.length, "items");
+      } else {
+        console.error("Failed to load expenses, response:", response?.status);
       }
-    },
-
-    async loadCategories() {
+    },    async loadCategories() {
+      console.log("Loading categories...");
       const response = await this.apiCall("/api/categories");
       if (response && response.ok) {
         this.categories = await response.json();
+        console.log("Categories loaded:", this.categories.length, "items");
+      } else {
+        console.error("Failed to load categories, response:", response?.status);
       }
     },
     async loadSources() {
@@ -861,7 +888,7 @@ function expenseTracker() {
         this.isDarkMode = true;
         this.applyTheme();
       }
-    },    // Authentication protection (silent, no annoying notifications)
+    }, // Authentication protection (silent, no annoying notifications)
     requireAuth() {
       if (!this.isAuthenticated) {
         console.warn("Access denied: Authentication required");
@@ -869,34 +896,41 @@ function expenseTracker() {
         return false;
       }
       return true;
-    },
-    // Protected API call wrapper
+    },    // Protected API call wrapper
     async apiCall(url, options = {}) {
       if (!this.requireAuth()) {
+        console.error("API call blocked: not authenticated");
         return null;
-      }      try {
+      }
+      
+      console.log("Making API call to:", url);
+      
+      try {
         // Add auth token to headers
         const defaultOptions = {
           headers: {
             "X-Auth-Token": this.authToken,
-            ...options.headers
+            ...options.headers,
           },
           ...options,
-        };        const response = await fetch(url, defaultOptions);
+        };
+        const response = await fetch(url, defaultOptions);
+
+        console.log("API response status:", response.status, "for", url);
 
         // Check if token is invalid (only happens if token was manually revoked)
         if (response.status === 401) {
-          console.warn("Token invalid, please login again");
+          console.warn("Token invalid (401), logging out user");
           this.authToken = null;
-          localStorage.removeItem('authToken');
+          localStorage.removeItem("authToken");
           this.isAuthenticated = false;
-          // Don't show annoying notification, just silently redirect to login
+          notifications.error("Sesi telah berakhir, silakan login kembali");
           return null;
         }
 
         return response;
       } catch (error) {
-        console.error("API call failed:", error);
+        console.error("API call failed for", url, ":", error);
         if (window.notifications) {
           notifications.error("Terjadi kesalahan koneksi");
         }
