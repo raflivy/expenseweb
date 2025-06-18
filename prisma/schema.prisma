@@ -67,3 +67,12 @@ model AuthToken {
 
   @@map("auth_tokens")
 }
+
+model SystemConfig {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("system_config")
+}
