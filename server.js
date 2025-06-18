@@ -66,14 +66,41 @@ function generateAuthToken() {
   return Buffer.from(`expense-tracker-${Date.now()}-${Math.random()}`).toString('base64');
 }
 
-// Persistent token storage (in production, consider using Redis or database)
-const validTokens = new Set();
+// Simple persistent token validation (for development)
+// In production, consider using Redis or database
+const fs = require('fs');
+const tokenFile = path.join(__dirname, '.tokens.json');
+
+function loadTokens() {
+  try {
+    if (fs.existsSync(tokenFile)) {
+      const data = fs.readFileSync(tokenFile, 'utf8');
+      return new Set(JSON.parse(data));
+    }
+  } catch (error) {
+    console.error('Error loading tokens:', error);
+  }
+  return new Set();
+}
+
+function saveTokens(tokens) {
+  try {
+    fs.writeFileSync(tokenFile, JSON.stringify([...tokens]), 'utf8');
+  } catch (error) {
+    console.error('Error saving tokens:', error);
+  }
+}
+
+const validTokens = loadTokens();
 
 // Authentication middleware (no timeout, persistent until logout)
 const requireAuth = (req, res, next) => {
   const token = req.headers['x-auth-token'] || req.headers['authorization']?.replace('Bearer ', '');
   
+  console.log(`Auth check for ${req.path} - Token:`, token ? token.substring(0, 20) + "..." : "None");
+  
   if (!token) {
+    console.log("No token provided");
     return res.status(401).json({ 
       error: "Authentication required",
       code: "NO_TOKEN",
@@ -82,6 +109,7 @@ const requireAuth = (req, res, next) => {
   }
   
   if (!validTokens.has(token)) {
+    console.log("Token not found in valid tokens");
     return res.status(401).json({ 
       error: "Invalid token", 
       code: "INVALID_TOKEN",
@@ -89,6 +117,7 @@ const requireAuth = (req, res, next) => {
     });
   }
   
+  console.log("Token is valid, proceeding");
   // Token is valid, proceed
   next();
 };
@@ -120,6 +149,7 @@ app.post("/api/login", async (req, res) => {
     );    if (isValid) {
       const token = generateAuthToken();
       validTokens.add(token);
+      saveTokens(validTokens);
       
       console.log(`New login successful. Active tokens: ${validTokens.size}`);
       
@@ -141,6 +171,7 @@ app.post("/api/logout", (req, res) => {
   const token = req.headers['x-auth-token'] || req.headers['authorization']?.replace('Bearer ', '');
   if (token) {
     validTokens.delete(token);
+    saveTokens(validTokens);
     console.log(`Logout successful. Remaining tokens: ${validTokens.size}`);
   }
   res.json({ success: true, message: "Logged out successfully" });
@@ -605,12 +636,17 @@ app.get("/api/health/db", dbConnectionTest);
 app.get("/api/auth/status", (req, res) => {
   const token = req.headers['x-auth-token'] || req.headers['authorization']?.replace('Bearer ', '');
   
+  console.log("Auth status check - Token:", token ? token.substring(0, 20) + "..." : "None");
+  console.log("Valid tokens count:", validTokens.size);
+  
   if (token && validTokens.has(token)) {
+    console.log("Token is valid");
     res.json({ 
       authenticated: true,
       message: "Token is valid"
     });
   } else {
+    console.log("Token is invalid or not found");
     res.json({ 
       authenticated: false,
       message: "No valid token found"
