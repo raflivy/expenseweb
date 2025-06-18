@@ -82,15 +82,18 @@ async function initializeTokens() {
       where: {
         OR: [
           { expiresAt: null }, // Never expires
-          { expiresAt: { gt: new Date() } } // Not expired yet
-        ]
-      }
+          { expiresAt: { gt: new Date() } }, // Not expired yet
+        ],
+      },
     });
-    
+
     for (const tokenRecord of dbTokens) {
-      validTokens.set(tokenRecord.token, new Date(tokenRecord.createdAt).getTime());
+      validTokens.set(
+        tokenRecord.token,
+        new Date(tokenRecord.createdAt).getTime()
+      );
     }
-    
+
     console.log(`Initialized ${validTokens.size} tokens from database`);
   } catch (error) {
     console.error("Failed to initialize tokens from database:", error);
@@ -102,16 +105,18 @@ async function initializeTokens() {
 function cleanupExpiredTokens() {
   const now = Date.now();
   const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
-  
+
   for (const [token, timestamp] of validTokens.entries()) {
     if (now - timestamp > maxAge) {
       validTokens.delete(token);
       console.log("Cleaned up expired token");
-      
+
       // Also clean from database
-      prisma.authToken.delete({
-        where: { token }
-      }).catch(err => console.error("Failed to delete token from DB:", err));
+      prisma.authToken
+        .delete({
+          where: { token },
+        })
+        .catch((err) => console.error("Failed to delete token from DB:", err));
     }
   }
 }
@@ -119,19 +124,23 @@ function cleanupExpiredTokens() {
 // Add token with timestamp
 async function addToken(token) {
   validTokens.set(token, Date.now());
-  
+
   // Also save to database as backup
   try {
     await prisma.authToken.create({
       data: {
         token,
-        expiresAt: null // No expiration
-      }
+        expiresAt: null, // No expiration
+      },
     });
-    console.log(`Token added to memory and database. Active tokens: ${validTokens.size}`);
+    console.log(
+      `Token added to memory and database. Active tokens: ${validTokens.size}`
+    );
   } catch (error) {
     console.error("Failed to save token to database:", error);
-    console.log(`Token added to memory only. Active tokens: ${validTokens.size}`);
+    console.log(
+      `Token added to memory only. Active tokens: ${validTokens.size}`
+    );
   }
 }
 
@@ -141,13 +150,13 @@ async function isValidToken(token) {
   if (validTokens.has(token)) {
     return true;
   }
-  
+
   // If not in memory, check database as fallback
   try {
     const dbToken = await prisma.authToken.findUnique({
-      where: { token }
+      where: { token },
     });
-    
+
     if (dbToken) {
       // Token exists in database, add back to memory
       validTokens.set(token, new Date(dbToken.createdAt).getTime());
@@ -157,27 +166,31 @@ async function isValidToken(token) {
   } catch (error) {
     console.error("Failed to check token in database:", error);
   }
-  
+
   return false;
 }
 
 // Remove token
 async function removeToken(token) {
   const removed = validTokens.delete(token);
-  
+
   // Also remove from database
   try {
     await prisma.authToken.delete({
-      where: { token }
+      where: { token },
     });
-    console.log(`Token removed from memory and database. Remaining tokens: ${validTokens.size}`);
+    console.log(
+      `Token removed from memory and database. Remaining tokens: ${validTokens.size}`
+    );
   } catch (error) {
     console.error("Failed to remove token from database:", error);
     if (removed) {
-      console.log(`Token removed from memory only. Remaining tokens: ${validTokens.size}`);
+      console.log(
+        `Token removed from memory only. Remaining tokens: ${validTokens.size}`
+      );
     }
   }
-  
+
   return removed;
 }
 
@@ -187,8 +200,13 @@ initializeTokens();
 // Periodic cleanup (every hour)
 setInterval(cleanupExpiredTokens, 60 * 60 * 1000);
 
+// Wrapper for async middleware to handle errors
+const asyncMiddleware = (fn) => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
+
 // Authentication middleware (no timeout, persistent until logout)
-const requireAuth = async (req, res, next) => {
+const requireAuth = asyncMiddleware(async (req, res, next) => {
   const token =
     req.headers["x-auth-token"] ||
     req.headers["authorization"]?.replace("Bearer ", "");
@@ -205,15 +223,16 @@ const requireAuth = async (req, res, next) => {
       code: "NO_TOKEN",
       message: "Please log in to access this resource.",
     });
-  }  if (!validTokens.has(token)) {
+  }
+  if (!validTokens.has(token)) {
     console.log("Token not found in memory, checking database...");
-    
+
     // Check database as fallback
     try {
       const dbToken = await prisma.authToken.findUnique({
-        where: { token }
+        where: { token },
       });
-      
+
       if (dbToken) {
         // Token exists in database, restore to memory
         validTokens.set(token, new Date(dbToken.createdAt).getTime());
@@ -235,11 +254,10 @@ const requireAuth = async (req, res, next) => {
       });
     }
   }
-
   console.log("Token is valid, proceeding");
   // Token is valid, proceed
   next();
-};
+});
 
 // Routes
 app.get("/", (req, res) => {
@@ -265,7 +283,8 @@ app.post("/api/login", async (req, res) => {
     const isValid = await bcrypt.compare(
       password,
       process.env.ADMIN_PASSWORD_HASH
-    );    if (isValid) {
+    );
+    if (isValid) {
       const token = generateAuthToken();
       await addToken(token);
 
