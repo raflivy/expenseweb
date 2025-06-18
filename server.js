@@ -1,5 +1,4 @@
 const express = require("express");
-const session = require("express-session");
 const bcrypt = require("bcryptjs");
 const bodyParser = require("body-parser");
 const cors = require("cors");
@@ -52,59 +51,45 @@ app.use(cors({
   origin: process.env.NODE_ENV === "production" 
     ? ["https://rvexpend.vercel.app", "https://*.vercel.app"] 
     : true,
-  credentials: true, // Important for sessions
+  credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
+  allowedHeaders: ["Content-Type", "Authorization", "X-Auth-Token"]
 }));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: process.env.NODE_ENV === "production", // HTTPS for production
-      httpOnly: true,
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // Important for Vercel
-      domain: process.env.NODE_ENV === "production" ? ".vercel.app" : undefined,
-    },
-    // For serverless environments
-    name: "expense-tracker-session",
-    // Additional serverless configuration
-    rolling: true, // Reset expiration on activity
-    proxy: process.env.NODE_ENV === "production", // Trust proxy in production
-  })
-);
 
 // Serve static files
 app.use(express.static(path.join(__dirname, "public")));
 
+// Simple token generator
+function generateAuthToken() {
+  return Buffer.from(`${Date.now()}-${Math.random()}`).toString('base64');
+}
+
+// Simple token validation
+const validTokens = new Set();
+
 // Authentication middleware
 const requireAuth = (req, res, next) => {
-  if (req.session && req.session.authenticated) {
-    // Check if session is still valid (not too old)
-    const sessionAge = Date.now() - (req.session.loginTime || 0);
-    const maxAge = 24 * 60 * 60 * 1000; // 24 hours
-    
-    if (sessionAge > maxAge) {
-      req.session.destroy();
-      return res.status(401).json({ 
-        error: "Session expired", 
-        code: "SESSION_EXPIRED",
-        message: "Your session has expired. Please log in again."
-      });
-    }
-    
-    next();
-  } else {
-    res.status(401).json({ 
+  const token = req.headers['x-auth-token'] || req.headers['authorization']?.replace('Bearer ', '');
+  
+  if (!token) {
+    return res.status(401).json({ 
       error: "Authentication required",
-      code: "NOT_AUTHENTICATED", 
+      code: "NO_TOKEN",
       message: "Please log in to access this resource."
     });
   }
+  
+  if (!validTokens.has(token)) {
+    return res.status(401).json({ 
+      error: "Invalid or expired token", 
+      code: "INVALID_TOKEN",
+      message: "Your session has expired. Please log in again."
+    });
+  }
+  
+  next();
 };
 
 // Routes
@@ -131,18 +116,21 @@ app.post("/api/login", async (req, res) => {
     const isValid = await bcrypt.compare(
       password,
       process.env.ADMIN_PASSWORD_HASH
-    );
-    if (isValid) {
-      req.session.authenticated = true;
-      req.session.loginTime = Date.now();
-
-      // Save session explicitly for serverless
-      req.session.save((err) => {
-        if (err) {
-          console.error("Session save error:", err);
-          return res.status(500).json({ error: "Session save failed" });
-        }
-        res.json({ success: true });
+    );    if (isValid) {
+      const token = generateAuthToken();
+      validTokens.add(token);
+      
+      // Clean up old tokens (keep only last 10 tokens)
+      if (validTokens.size > 10) {
+        const tokensArray = Array.from(validTokens);
+        const oldToken = tokensArray[0];
+        validTokens.delete(oldToken);
+      }
+      
+      res.json({ 
+        success: true, 
+        token: token,
+        message: "Login successful" 
       });
     } else {
       res.status(401).json({ error: "Invalid password" });
@@ -154,8 +142,11 @@ app.post("/api/login", async (req, res) => {
 });
 
 app.post("/api/logout", (req, res) => {
-  req.session.destroy();
-  res.json({ success: true });
+  const token = req.headers['x-auth-token'] || req.headers['authorization']?.replace('Bearer ', '');
+  if (token) {
+    validTokens.delete(token);
+  }
+  res.json({ success: true, message: "Logged out successfully" });
 });
 
 app.post("/api/change-password", requireAuth, async (req, res) => {
@@ -613,18 +604,19 @@ app.get("/api/health/simple", simpleHealthCheck);
 // Database connection test only
 app.get("/api/health/db", dbConnectionTest);
 
-// Check session status endpoint
-app.get("/api/session", (req, res) => {
-  if (req.session && req.session.authenticated) {
+// Check authentication status endpoint
+app.get("/api/auth/status", (req, res) => {
+  const token = req.headers['x-auth-token'] || req.headers['authorization']?.replace('Bearer ', '');
+  
+  if (token && validTokens.has(token)) {
     res.json({ 
-      authenticated: true, 
-      loginTime: req.session.loginTime,
-      sessionAge: Date.now() - (req.session.loginTime || Date.now())
+      authenticated: true,
+      message: "Token is valid"
     });
   } else {
     res.json({ 
       authenticated: false,
-      reason: "Session not found or expired"
+      message: "No valid token found"
     });
   }
 });
