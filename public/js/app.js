@@ -2,6 +2,7 @@ function expenseTracker() {
   return {
     // Authentication
     isAuthenticated: false,
+    authToken: localStorage.getItem('authToken') || null,
     password: "",
     loading: false,
     error: "",
@@ -78,14 +79,19 @@ function expenseTracker() {
     // Initialization
     async init() {
       console.log("Initializing expense tracker...");
-      await this.checkSession();
+      await this.checkAuth();
       this.loadTheme();
-    },
+    },    async checkAuth() {
+      if (!this.authToken) {
+        this.isAuthenticated = false;
+        return;
+      }
 
-    async checkSession() {
       try {
-        const response = await fetch("/api/session", {
-          credentials: "include",
+        const response = await fetch("/api/auth/status", {
+          headers: {
+            "X-Auth-Token": this.authToken
+          }
         });
         const data = await response.json();
 
@@ -93,10 +99,14 @@ function expenseTracker() {
           this.isAuthenticated = true;
           await this.loadData();
         } else {
+          this.authToken = null;
+          localStorage.removeItem('authToken');
           this.isAuthenticated = false;
         }
       } catch (error) {
-        console.error("Session check failed:", error);
+        console.error("Auth check failed:", error);
+        this.authToken = null;
+        localStorage.removeItem('authToken');
         this.isAuthenticated = false;
       }
     },
@@ -106,17 +116,17 @@ function expenseTracker() {
       this.loading = true;
       this.error = "";
 
-      try {
-        const response = await fetch("/api/login", {
+      try {        const response = await fetch("/api/login", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          credentials: "include", // Important for sessions
           body: JSON.stringify({ password: this.password }),
         });
         const data = await response.json();
-        if (response.ok) {
+        if (response.ok && data.success) {
+          this.authToken = data.token;
+          localStorage.setItem('authToken', data.token);
           this.isAuthenticated = true;
           this.password = "";
           await this.loadData();
@@ -133,12 +143,17 @@ function expenseTracker() {
       } finally {
         this.loading = false;
       }
-    },
-    async logout() {
-      await fetch("/api/logout", {
-        method: "POST",
-        credentials: "include",
-      });
+    },    async logout() {
+      if (this.authToken) {
+        await fetch("/api/logout", {
+          method: "POST",
+          headers: {
+            "X-Auth-Token": this.authToken
+          }
+        });
+      }
+      this.authToken = null;
+      localStorage.removeItem('authToken');
       this.isAuthenticated = false;
       this.expenses = [];
       this.categories = [];
@@ -822,20 +837,23 @@ function expenseTracker() {
     async apiCall(url, options = {}) {
       if (!this.requireAuth()) {
         return null;
-      }
-
-      try {
-        // Ensure credentials are included
+      }      try {
+        // Add auth token to headers
         const defaultOptions = {
-          credentials: "include",
+          headers: {
+            "X-Auth-Token": this.authToken,
+            ...options.headers
+          },
           ...options,
         };
 
         const response = await fetch(url, defaultOptions);
 
-        // Check if session expired
+        // Check if token expired
         if (response.status === 401) {
-          console.warn("Session expired, redirecting to login");
+          console.warn("Token expired, redirecting to login");
+          this.authToken = null;
+          localStorage.removeItem('authToken');
           this.isAuthenticated = false;
           if (window.notifications) {
             notifications.error("Sesi telah berakhir, silakan login kembali");
