@@ -58,3 +58,12 @@ model Budget {
   @@unique([month, year])
   @@map("budgets")
 }
+
+model AuthToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+
+  @@map("auth_tokens")
+}
