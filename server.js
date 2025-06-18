@@ -47,14 +47,17 @@ console.log("ADMIN_PASSWORD_HASH exists:", !!process.env.ADMIN_PASSWORD_HASH);
 console.log("PORT:", PORT);
 
 // Middleware
-app.use(cors({
-  origin: process.env.NODE_ENV === "production" 
-    ? ["https://rvexpend.vercel.app", "https://*.vercel.app"] 
-    : true,
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Auth-Token"]
-}));
+app.use(
+  cors({
+    origin:
+      process.env.NODE_ENV === "production"
+        ? ["https://rvexpend.vercel.app", "https://*.vercel.app"]
+        : true,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Auth-Token"],
+  })
+);
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -63,60 +66,176 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // Simple token generator
 function generateAuthToken() {
-  return Buffer.from(`expense-tracker-${Date.now()}-${Math.random()}`).toString('base64');
+  return Buffer.from(`expense-tracker-${Date.now()}-${Math.random()}`).toString(
+    "base64"
+  );
 }
 
-// Simple persistent token validation (for development)
-// In production, consider using Redis or database
-const fs = require('fs');
-const tokenFile = path.join(__dirname, '.tokens.json');
+// Token storage for serverless environment
+// Use in-memory storage with database backup for Vercel deployment
+const validTokens = new Map(); // Map to store token -> timestamp
 
-function loadTokens() {
+// Initialize tokens from database on startup
+async function initializeTokens() {
   try {
-    if (fs.existsSync(tokenFile)) {
-      const data = fs.readFileSync(tokenFile, 'utf8');
-      return new Set(JSON.parse(data));
+    const dbTokens = await prisma.authToken.findMany({
+      where: {
+        OR: [
+          { expiresAt: null }, // Never expires
+          { expiresAt: { gt: new Date() } } // Not expired yet
+        ]
+      }
+    });
+    
+    for (const tokenRecord of dbTokens) {
+      validTokens.set(tokenRecord.token, new Date(tokenRecord.createdAt).getTime());
+    }
+    
+    console.log(`Initialized ${validTokens.size} tokens from database`);
+  } catch (error) {
+    console.error("Failed to initialize tokens from database:", error);
+    // Continue without database tokens
+  }
+}
+
+// Token cleanup function
+function cleanupExpiredTokens() {
+  const now = Date.now();
+  const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+  
+  for (const [token, timestamp] of validTokens.entries()) {
+    if (now - timestamp > maxAge) {
+      validTokens.delete(token);
+      console.log("Cleaned up expired token");
+      
+      // Also clean from database
+      prisma.authToken.delete({
+        where: { token }
+      }).catch(err => console.error("Failed to delete token from DB:", err));
+    }
+  }
+}
+
+// Add token with timestamp
+async function addToken(token) {
+  validTokens.set(token, Date.now());
+  
+  // Also save to database as backup
+  try {
+    await prisma.authToken.create({
+      data: {
+        token,
+        expiresAt: null // No expiration
+      }
+    });
+    console.log(`Token added to memory and database. Active tokens: ${validTokens.size}`);
+  } catch (error) {
+    console.error("Failed to save token to database:", error);
+    console.log(`Token added to memory only. Active tokens: ${validTokens.size}`);
+  }
+}
+
+// Check if token is valid
+async function isValidToken(token) {
+  // Check memory first
+  if (validTokens.has(token)) {
+    return true;
+  }
+  
+  // If not in memory, check database as fallback
+  try {
+    const dbToken = await prisma.authToken.findUnique({
+      where: { token }
+    });
+    
+    if (dbToken) {
+      // Token exists in database, add back to memory
+      validTokens.set(token, new Date(dbToken.createdAt).getTime());
+      console.log("Token restored from database to memory");
+      return true;
     }
   } catch (error) {
-    console.error('Error loading tokens:', error);
+    console.error("Failed to check token in database:", error);
   }
-  return new Set();
+  
+  return false;
 }
 
-function saveTokens(tokens) {
+// Remove token
+async function removeToken(token) {
+  const removed = validTokens.delete(token);
+  
+  // Also remove from database
   try {
-    fs.writeFileSync(tokenFile, JSON.stringify([...tokens]), 'utf8');
+    await prisma.authToken.delete({
+      where: { token }
+    });
+    console.log(`Token removed from memory and database. Remaining tokens: ${validTokens.size}`);
   } catch (error) {
-    console.error('Error saving tokens:', error);
+    console.error("Failed to remove token from database:", error);
+    if (removed) {
+      console.log(`Token removed from memory only. Remaining tokens: ${validTokens.size}`);
+    }
   }
+  
+  return removed;
 }
 
-const validTokens = loadTokens();
+// Initialize tokens on startup
+initializeTokens();
+
+// Periodic cleanup (every hour)
+setInterval(cleanupExpiredTokens, 60 * 60 * 1000);
 
 // Authentication middleware (no timeout, persistent until logout)
-const requireAuth = (req, res, next) => {
-  const token = req.headers['x-auth-token'] || req.headers['authorization']?.replace('Bearer ', '');
-  
-  console.log(`Auth check for ${req.path} - Token:`, token ? token.substring(0, 20) + "..." : "None");
-  
+const requireAuth = async (req, res, next) => {
+  const token =
+    req.headers["x-auth-token"] ||
+    req.headers["authorization"]?.replace("Bearer ", "");
+
+  console.log(
+    `Auth check for ${req.path} - Token:`,
+    token ? token.substring(0, 20) + "..." : "None"
+  );
+
   if (!token) {
     console.log("No token provided");
-    return res.status(401).json({ 
+    return res.status(401).json({
       error: "Authentication required",
       code: "NO_TOKEN",
-      message: "Please log in to access this resource."
+      message: "Please log in to access this resource.",
     });
+  }  if (!validTokens.has(token)) {
+    console.log("Token not found in memory, checking database...");
+    
+    // Check database as fallback
+    try {
+      const dbToken = await prisma.authToken.findUnique({
+        where: { token }
+      });
+      
+      if (dbToken) {
+        // Token exists in database, restore to memory
+        validTokens.set(token, new Date(dbToken.createdAt).getTime());
+        console.log("Token restored from database, proceeding");
+      } else {
+        console.log("Token not found in database either");
+        return res.status(401).json({
+          error: "Invalid token",
+          code: "INVALID_TOKEN",
+          message: "Please log in again.",
+        });
+      }
+    } catch (error) {
+      console.error("Database check failed:", error);
+      return res.status(401).json({
+        error: "Invalid token",
+        code: "INVALID_TOKEN",
+        message: "Please log in again.",
+      });
+    }
   }
-  
-  if (!validTokens.has(token)) {
-    console.log("Token not found in valid tokens");
-    return res.status(401).json({ 
-      error: "Invalid token", 
-      code: "INVALID_TOKEN",
-      message: "Please log in again."
-    });
-  }
-  
+
   console.log("Token is valid, proceeding");
   // Token is valid, proceed
   next();
@@ -148,15 +267,14 @@ app.post("/api/login", async (req, res) => {
       process.env.ADMIN_PASSWORD_HASH
     );    if (isValid) {
       const token = generateAuthToken();
-      validTokens.add(token);
-      saveTokens(validTokens);
-      
+      await addToken(token);
+
       console.log(`New login successful. Active tokens: ${validTokens.size}`);
-      
-      res.json({ 
-        success: true, 
+
+      res.json({
+        success: true,
         token: token,
-        message: "Login successful - no timeout, logout only on sign out" 
+        message: "Login successful - no timeout, logout only on sign out",
       });
     } else {
       res.status(401).json({ error: "Invalid password" });
@@ -167,12 +285,12 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-app.post("/api/logout", (req, res) => {
-  const token = req.headers['x-auth-token'] || req.headers['authorization']?.replace('Bearer ', '');
+app.post("/api/logout", async (req, res) => {
+  const token =
+    req.headers["x-auth-token"] ||
+    req.headers["authorization"]?.replace("Bearer ", "");
   if (token) {
-    validTokens.delete(token);
-    saveTokens(validTokens);
-    console.log(`Logout successful. Remaining tokens: ${validTokens.size}`);
+    await removeToken(token);
   }
   res.json({ success: true, message: "Logged out successfully" });
 });
@@ -621,7 +739,11 @@ process.on("SIGTERM", async () => {
 });
 
 // Health check endpoints
-const { healthCheck, simpleHealthCheck, dbConnectionTest } = require("./api/health");
+const {
+  healthCheck,
+  simpleHealthCheck,
+  dbConnectionTest,
+} = require("./api/health");
 
 // Comprehensive health check
 app.get("/api/health", healthCheck);
@@ -633,23 +755,27 @@ app.get("/api/health/simple", simpleHealthCheck);
 app.get("/api/health/db", dbConnectionTest);
 
 // Check authentication status endpoint
-app.get("/api/auth/status", (req, res) => {
-  const token = req.headers['x-auth-token'] || req.headers['authorization']?.replace('Bearer ', '');
-  
-  console.log("Auth status check - Token:", token ? token.substring(0, 20) + "..." : "None");
+app.get("/api/auth/status", async (req, res) => {
+  const token =
+    req.headers["x-auth-token"] ||
+    req.headers["authorization"]?.replace("Bearer ", "");
+
+  console.log(
+    "Auth status check - Token:",
+    token ? token.substring(0, 20) + "..." : "None"
+  );
   console.log("Valid tokens count:", validTokens.size);
-  
-  if (token && validTokens.has(token)) {
+  if (token && (await isValidToken(token))) {
     console.log("Token is valid");
-    res.json({ 
+    res.json({
       authenticated: true,
-      message: "Token is valid"
+      message: "Token is valid",
     });
   } else {
     console.log("Token is invalid or not found");
-    res.json({ 
+    res.json({
       authenticated: false,
-      message: "No valid token found"
+      message: "No valid token found",
     });
   }
 });
