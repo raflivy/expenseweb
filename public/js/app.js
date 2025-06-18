@@ -251,7 +251,7 @@ function expenseTracker() {
           // Load data directly without requireAuth check since we just logged in
           await this.loadDataAfterLogin();
           notifications.success(
-            "Login berhasil!"
+            "Login berhasil! Token akan tetap aktif hingga logout."
           );
         } else {
           this.error = data.error || "Login failed";
@@ -317,32 +317,8 @@ function expenseTracker() {
             notifications.success(data.message || "Password berhasil diubah");
           } else {
             alert(data.message || "Password berhasil diubah");
-          }
-
-          this.showPasswordModal = false;
+          }          this.showPasswordModal = false;
           this.passwordForm = { current: "", new: "", confirm: "" };
-
-          // Tanya user apakah ingin restart server untuk efek penuh
-          const shouldRestart = confirm(
-            "Password telah diubah. Restart server untuk efek penuh?"
-          );
-          if (shouldRestart) {
-            try {
-              await this.apiCall("/api/restart", {
-                method: "POST",
-              });
-              if (window.notifications) {
-                notifications.info("Server akan restart dalam 2 detik...");
-              }
-
-              // Redirect ke halaman login setelah restart
-              setTimeout(() => {
-                window.location.reload();
-              }, 3000);
-            } catch (restartError) {
-              console.log("Manual restart required");
-            }
-          }
         } else {
           if (window.notifications) {
             notifications.error(data.error || "Gagal mengubah password");
