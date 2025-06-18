@@ -35,6 +35,11 @@ async function testDatabaseConnection() {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust proxy for Vercel deployment
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 // Debug environment variables
 console.log("Environment check:");
 console.log("DATABASE_URL exists:", !!process.env.DATABASE_URL);
@@ -43,7 +48,14 @@ console.log("ADMIN_PASSWORD_HASH exists:", !!process.env.ADMIN_PASSWORD_HASH);
 console.log("PORT:", PORT);
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.NODE_ENV === "production" 
+    ? ["https://rvexpend.vercel.app", "https://*.vercel.app"] 
+    : true,
+  credentials: true, // Important for sessions
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(
@@ -52,13 +64,17 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: false, // Set to true only if using HTTPS
+      secure: process.env.NODE_ENV === "production", // HTTPS for production
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      sameSite: "lax",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // Important for Vercel
+      domain: process.env.NODE_ENV === "production" ? ".vercel.app" : undefined,
     },
     // For serverless environments
     name: "expense-tracker-session",
+    // Additional serverless configuration
+    rolling: true, // Reset expiration on activity
+    proxy: process.env.NODE_ENV === "production", // Trust proxy in production
   })
 );
 
@@ -67,10 +83,27 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // Authentication middleware
 const requireAuth = (req, res, next) => {
-  if (req.session.authenticated) {
+  if (req.session && req.session.authenticated) {
+    // Check if session is still valid (not too old)
+    const sessionAge = Date.now() - (req.session.loginTime || 0);
+    const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+    
+    if (sessionAge > maxAge) {
+      req.session.destroy();
+      return res.status(401).json({ 
+        error: "Session expired", 
+        code: "SESSION_EXPIRED",
+        message: "Your session has expired. Please log in again."
+      });
+    }
+    
     next();
   } else {
-    res.status(401).json({ error: "Authentication required" });
+    res.status(401).json({ 
+      error: "Authentication required",
+      code: "NOT_AUTHENTICATED", 
+      message: "Please log in to access this resource."
+    });
   }
 };
 
@@ -579,5 +612,21 @@ app.get("/api/health/simple", simpleHealthCheck);
 
 // Database connection test only
 app.get("/api/health/db", dbConnectionTest);
+
+// Check session status endpoint
+app.get("/api/session", (req, res) => {
+  if (req.session && req.session.authenticated) {
+    res.json({ 
+      authenticated: true, 
+      loginTime: req.session.loginTime,
+      sessionAge: Date.now() - (req.session.loginTime || Date.now())
+    });
+  } else {
+    res.json({ 
+      authenticated: false,
+      reason: "Session not found or expired"
+    });
+  }
+});
 
 module.exports = app;
