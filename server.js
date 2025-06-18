@@ -63,13 +63,13 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // Simple token generator
 function generateAuthToken() {
-  return Buffer.from(`${Date.now()}-${Math.random()}`).toString('base64');
+  return Buffer.from(`expense-tracker-${Date.now()}-${Math.random()}`).toString('base64');
 }
 
-// Simple token validation
+// Persistent token storage (in production, consider using Redis or database)
 const validTokens = new Set();
 
-// Authentication middleware
+// Authentication middleware (no timeout, persistent until logout)
 const requireAuth = (req, res, next) => {
   const token = req.headers['x-auth-token'] || req.headers['authorization']?.replace('Bearer ', '');
   
@@ -83,12 +83,13 @@ const requireAuth = (req, res, next) => {
   
   if (!validTokens.has(token)) {
     return res.status(401).json({ 
-      error: "Invalid or expired token", 
+      error: "Invalid token", 
       code: "INVALID_TOKEN",
-      message: "Your session has expired. Please log in again."
+      message: "Please log in again."
     });
   }
   
+  // Token is valid, proceed
   next();
 };
 
@@ -120,17 +121,12 @@ app.post("/api/login", async (req, res) => {
       const token = generateAuthToken();
       validTokens.add(token);
       
-      // Clean up old tokens (keep only last 10 tokens)
-      if (validTokens.size > 10) {
-        const tokensArray = Array.from(validTokens);
-        const oldToken = tokensArray[0];
-        validTokens.delete(oldToken);
-      }
+      console.log(`New login successful. Active tokens: ${validTokens.size}`);
       
       res.json({ 
         success: true, 
         token: token,
-        message: "Login successful" 
+        message: "Login successful - no timeout, logout only on sign out" 
       });
     } else {
       res.status(401).json({ error: "Invalid password" });
@@ -145,6 +141,7 @@ app.post("/api/logout", (req, res) => {
   const token = req.headers['x-auth-token'] || req.headers['authorization']?.replace('Bearer ', '');
   if (token) {
     validTokens.delete(token);
+    console.log(`Logout successful. Remaining tokens: ${validTokens.size}`);
   }
   res.json({ success: true, message: "Logged out successfully" });
 });
