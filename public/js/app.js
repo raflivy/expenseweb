@@ -81,7 +81,8 @@ function expenseTracker() {
       console.log("Initializing expense tracker...");
       await this.checkAuth();
       this.loadTheme();
-    },    async checkAuth() {
+    },    // Check authentication status on app load (no timeout, persistent until logout)
+    async checkAuth() {
       if (!this.authToken) {
         this.isAuthenticated = false;
         return;
@@ -97,16 +98,18 @@ function expenseTracker() {
 
         if (data.authenticated) {
           this.isAuthenticated = true;
+          console.log("Authentication verified - token is valid");
           await this.loadData();
         } else {
+          // Only clear token if server says it's invalid, not because of timeout
+          console.log("Token invalid, clearing authentication");
           this.authToken = null;
           localStorage.removeItem('authToken');
           this.isAuthenticated = false;
         }
       } catch (error) {
         console.error("Auth check failed:", error);
-        this.authToken = null;
-        localStorage.removeItem('authToken');
+        // Don't clear token on network errors, just set as not authenticated for now
         this.isAuthenticated = false;
       }
     },
@@ -123,14 +126,14 @@ function expenseTracker() {
           },
           body: JSON.stringify({ password: this.password }),
         });
-        const data = await response.json();
-        if (response.ok && data.success) {
+        const data = await response.json();        if (response.ok && data.success) {
           this.authToken = data.token;
           localStorage.setItem('authToken', data.token);
           this.isAuthenticated = true;
           this.password = "";
+          console.log("Login successful - no timeout, persistent until logout");
           await this.loadData();
-          notifications.success("Login berhasil!");
+          notifications.success("Login berhasil! Token akan tetap aktif hingga logout.");
         } else {
           this.error = data.error || "Login failed";
           notifications.error(this.error);
@@ -145,12 +148,17 @@ function expenseTracker() {
       }
     },    async logout() {
       if (this.authToken) {
-        await fetch("/api/logout", {
-          method: "POST",
-          headers: {
-            "X-Auth-Token": this.authToken
-          }
-        });
+        try {
+          await fetch("/api/logout", {
+            method: "POST",
+            headers: {
+              "X-Auth-Token": this.authToken
+            }
+          });
+          console.log("Logout successful");
+        } catch (error) {
+          console.error("Logout request failed:", error);
+        }
       }
       this.authToken = null;
       localStorage.removeItem('authToken');
@@ -158,6 +166,7 @@ function expenseTracker() {
       this.expenses = [];
       this.categories = [];
       this.sources = [];
+      notifications.success("Logout berhasil!");
     },
     async changePassword() {
       if (this.passwordForm.new !== this.passwordForm.confirm) {
@@ -820,15 +829,11 @@ function expenseTracker() {
         this.isDarkMode = true;
         this.applyTheme();
       }
-    },
-
-    // Authentication protection
+    },    // Authentication protection (silent, no annoying notifications)
     requireAuth() {
       if (!this.isAuthenticated) {
         console.warn("Access denied: Authentication required");
-        if (window.notifications) {
-          notifications.error("Silakan login terlebih dahulu");
-        }
+        // Don't show notification, just silently return false
         return false;
       }
       return true;
@@ -845,19 +850,15 @@ function expenseTracker() {
             ...options.headers
           },
           ...options,
-        };
+        };        const response = await fetch(url, defaultOptions);
 
-        const response = await fetch(url, defaultOptions);
-
-        // Check if token expired
+        // Check if token is invalid (only happens if token was manually revoked)
         if (response.status === 401) {
-          console.warn("Token expired, redirecting to login");
+          console.warn("Token invalid, please login again");
           this.authToken = null;
           localStorage.removeItem('authToken');
           this.isAuthenticated = false;
-          if (window.notifications) {
-            notifications.error("Sesi telah berakhir, silakan login kembali");
-          }
+          // Don't show annoying notification, just silently redirect to login
           return null;
         }
 
