@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="id" :data-theme="isDarkMode ? 'dark' : 'light'">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#3B82F6" />
+    <title>Expense Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
+      defer
+    ></script>
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined"
+      rel="stylesheet"
+    />
+    <link href="css/custom.css" rel="stylesheet" />
+    <style>
+      body {
+        font-family: "Roboto", "Inter", sans-serif;
+        background-color: #f8fafc !important;
+        font-size: 14px;
+      }
+
+      html {
+        background-color: #f8fafc !important;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      .glass-effect {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+      .slide-up {
+        animation: slideUp 0.3s ease-out;
+      }
+      .slide-down {
+        animation: slideDown 0.3s ease-out;
+      }
+      @keyframes slideUp {
+        from {
+          transform: translateY(100%);
+        }
+        to {
+          transform: translateY(0);
+        }
+      }
+      @keyframes slideDown {
+        from {
+          transform: translateY(0);
+        }
+        to {
+          transform: translateY(100%);
+        }
+      }
+      .fade-in {
+        animation: fadeIn 0.3s ease-out;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      .bounce-in {
+        animation: bounceIn 0.5s ease-out;
+      }
+      @keyframes bounceIn {
+        0% {
+          transform: scale(0.3) translateY(100px);
+          opacity: 0;
+        }
+        50% {
+          transform: scale(1.1);
+          opacity: 0.8;
+        }
+        100% {
+          transform: scale(1) translateY(0);
+          opacity: 1;
+        }
+      }
+      .floating {
+        animation: floating 3s ease-in-out infinite;
+      }
+      @keyframes floating {
+        0%,
+        100% {
+          transform: translateY(0px);
+        }
+        50% {
+          transform: translateY(-10px);
+        }
+      }
+      .pulse-slow {
+        animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      }
+      .gradient-bg {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      }
+      .card-hover {
+        transition: all 0.3s ease;
+      }
+      .card-hover:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+      }
+      .progress-bar {
+        transition: width 1s ease-in-out;
+      }
+
+      /* App container adjustments */
+      .app-container {
+        background-color: var(--app-content-background-color);
+        min-height: 100vh;
+        transition: background-color 0.4s ease;
+      } /* Home style */
+      .home-style {
+        --app-content-background-color: #f8fafc;
+      }
+
+      /* Add style */
+      .add-style {
+        --app-content-background-color: #f8fafc;
+      }
+
+      /* Reports style */
+      .reports-style {
+        --app-content-background-color: #f8fafc;
+      }
+    </style>
+  </head>
+  <body
+    class="app-container home-style transition-all duration-500"
+    x-data="expenseTracker()"
+    x-init="init()"
+  >
+    <!-- Fallback for when JavaScript is disabled or fails -->
+    <noscript>
+      <div class="min-h-screen flex items-center justify-center p-4 bg-gray-50">
+        <div class="bg-white rounded-lg p-8 max-w-md text-center">
+          <h1 class="text-2xl font-bold text-gray-800 mb-4">
+            JavaScript Required
+          </h1>
+          <p class="text-gray-600">
+            This application requires JavaScript to function properly. Please
+            enable JavaScript in your browser.
+          </p>
+        </div>
+      </div>
+    </noscript>
+    <!-- Login Screen -->
+    <div
+      x-show="!isAuthenticated"
+      class="min-h-screen gradient-bg flex items-center justify-center p-4"
+    >
+      <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl">
+        <div class="text-center mb-8">
+          <div class="floating">
+            <i class="fas fa-wallet text-6xl text-indigo-600 mb-4"></i>
+          </div>
+          <h1 class="text-3xl font-bold text-gray-800 mb-2">Expense Tracker</h1>
+          <p class="text-gray-600">Kelola pengeluaran harianmu</p>
+        </div>
+
+        <form @submit.prevent="login" class="space-y-6">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2"
+              >Password</label
+            >
+            <input
+              type="password"
+              x-model="password"
+              class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              placeholder="Masukkan password"
+              required
+            />
+          </div>
+
+          <button
+            type="submit"
+            :disabled="loading"
+            class="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50"
+          >
+            <span x-show="!loading">Masuk</span>
+            <span x-show="loading" class="flex items-center justify-center">
+              <i class="fas fa-spinner fa-spin mr-2"></i>
+              Loading...
+            </span>
+          </button>
+        </form>
+
+        <div
+          x-show="error"
+          class="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg"
+        >
+          <span x-text="error"></span>
+        </div>
+      </div>
+    </div>
+    <!-- Main App -->
+    <div x-show="isAuthenticated" class="min-h-screen bg-gray-50 pb-20">
+      <!-- Header -->
+      <header class="bg-white shadow-sm sticky top-0 z-40">
+        <div class="px-4 py-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h1
+                class="text-xl font-bold text-gray-800"
+                x-text="getPageTitle()"
+              ></h1>
+              <p class="text-sm text-gray-600" x-text="getCurrentDate()"></p>
+            </div>
+            <div class="flex items-center space-x-2">
+              <button
+                @click="showBudgetModal = true"
+                class="p-2 bg-indigo-100 rounded-lg"
+              >
+                <i class="fas fa-cog text-indigo-600"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Content Area -->
+      <main class="px-4 py-6 pb-28">
+        <!-- Menambahkan padding bottom untuk menghindari konten tertutup navbar -->
+
+        <!-- Home Tab -->
+        <div x-show="activeTab === 'home'" class="space-y-6">
+          <!-- Budget Progress Card -->
+          <div class="bg-white rounded-2xl p-6 shadow-sm card-hover">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-lg font-semibold text-gray-800">
+                Budget Bulanan
+              </h2>
+              <button
+                @click="showBudgetModal = true"
+                class="text-indigo-600 text-sm font-medium"
+              >
+                Edit Budget
+              </button>
+            </div>
+
+            <div class="space-y-4">
+              <div class="flex justify-between items-center">
+                <span
+                  class="text-2xl font-bold"
+                  :class="getBudgetTextColor()"
+                  x-text="formatCurrency(monthlySpent)"
+                ></span>
+                <span
+                  class="text-gray-500"
+                  x-text="'dari ' + formatCurrency(monthlyBudget)"
+                ></span>
+              </div>
+
+              <div class="w-full bg-gray-200 rounded-full h-3">
+                <div
+                  class="h-3 rounded-full progress-bar"
+                  :class="getBudgetBarColor()"
+                  :style="`width: ${getBudgetPercentage()}%`"
+                ></div>
+              </div>
+
+              <div class="flex justify-between text-sm">
+                <span
+                  :class="getBudgetTextColor()"
+                  x-text="getBudgetStatus()"
+                ></span>
+                <span
+                  class="text-gray-500"
+                  x-text="getBudgetPercentage() + '%'"
+                ></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chart Card -->
+          <div class="bg-white rounded-2xl p-6 shadow-sm card-hover">
+            <h2 class="text-lg font-semibold text-gray-800 mb-4">
+              Grafik Pengeluaran Bulanan
+            </h2>
+            <div class="relative h-64">
+              <canvas id="monthlyChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Recent Expenses -->
+          <div class="bg-white rounded-2xl p-6 shadow-sm card-hover">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-lg font-semibold text-gray-800">
+                Pengeluaran Terbaru
+              </h2>
+              <span
+                class="text-sm text-gray-500"
+                x-text="recentExpenses.length + ' transaksi'"
+              ></span>
+            </div>
+
+            <div class="space-y-3">
+              <template
+                x-for="expense in recentExpenses.slice(0, 5)"
+                :key="expense.id"
+              >
+                <div
+                  class="flex items-center justify-between p-3 bg-gray-50 rounded-xl"
+                >
+                  <div class="flex items-center space-x-3">
+                    <div
+                      class="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm"
+                      :style="`background-color: ${expense.category.color}`"
+                      x-text="expense.category.icon"
+                    ></div>
+                    <div>
+                      <p
+                        class="font-medium text-gray-800"
+                        x-text="expense.title"
+                      ></p>
+                      <p
+                        class="text-sm text-gray-500"
+                        x-text="formatDate(expense.date)"
+                      ></p>
+                    </div>
+                  </div>
+                  <span
+                    class="font-semibold text-red-600"
+                    x-text="'-' + formatCurrency(expense.amount)"
+                  ></span>
+                </div>
+              </template>
+
+              <div
+                x-show="recentExpenses.length === 0"
+                class="text-center py-8 text-gray-500"
+              >
+                <i class="fas fa-receipt text-4xl mb-2"></i>
+                <p>Belum ada pengeluaran</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reports Tab -->
+        <div x-show="activeTab === 'reports'" class="space-y-6">
+          <!-- Summary Cards -->
+          <div class="grid grid-cols-2 gap-4">
+            <div class="bg-white rounded-2xl p-4 shadow-sm card-hover">
+              <div class="text-center">
+                <i class="fas fa-calendar-day text-2xl text-blue-600 mb-2"></i>
+                <p class="text-sm text-gray-600">Hari Ini</p>
+                <p
+                  class="text-lg font-bold text-gray-800"
+                  x-text="formatCurrency(todaySpent)"
+                ></p>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-2xl p-4 shadow-sm card-hover">
+              <div class="text-center">
+                <i
+                  class="fas fa-calendar-week text-2xl text-green-600 mb-2"
+                ></i>
+                <p class="text-sm text-gray-600">Minggu Ini</p>
+                <p
+                  class="text-lg font-bold text-gray-800"
+                  x-text="formatCurrency(weeklySpent)"
+                ></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Date Range Filter -->
+          <div class="bg-white rounded-2xl p-6 shadow-sm">
+            <h3 class="text-lg font-semibold text-gray-800 mb-4">
+              Filter Tanggal
+            </h3>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2"
+                  >Dari</label
+                >
+                <input
+                  type="date"
+                  x-model="dateFilter.start"
+                  @change="applyDateFilter"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2"
+                  >Sampai</label
+                >
+                <input
+                  type="date"
+                  x-model="dateFilter.end"
+                  @change="applyDateFilter"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- Expenses List -->
+          <div class="bg-white rounded-2xl p-6 shadow-sm">
+            <h3 class="text-lg font-semibold text-gray-800 mb-4">
+              Detail Pengeluaran
+            </h3>
+
+            <div class="space-y-3">
+              <template x-for="expense in filteredExpenses" :key="expense.id">
+                <div
+                  class="flex items-center justify-between p-3 bg-gray-50 rounded-xl"
+                >
+                  <div class="flex items-center space-x-3">
+                    <div
+                      class="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm"
+                      :style="`background-color: ${expense.category.color}`"
+                      x-text="expense.category.icon"
+                    ></div>
+                    <div>
+                      <p
+                        class="font-medium text-gray-800"
+                        x-text="expense.title"
+                      ></p>
+                      <p
+                        class="text-sm text-gray-500"
+                        x-text="expense.category.name + ' • ' + formatDate(expense.date)"
+                      ></p>
+                    </div>
+                  </div>
+                  <div class="text-right">
+                    <p
+                      class="font-semibold text-red-600"
+                      x-text="'-' + formatCurrency(expense.amount)"
+                    ></p>
+                    <button
+                      @click="editExpense(expense)"
+                      class="text-xs text-indigo-600 hover:underline"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </div>
+              </template>
+
+              <div
+                x-show="filteredExpenses.length === 0"
+                class="text-center py-8 text-gray-500"
+              >
+                <i class="fas fa-search text-4xl mb-2"></i>
+                <p>Tidak ada pengeluaran ditemukan</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Management Cards -->
+          <div class="space-y-4">
+            <button
+              @click="showCategoryModal = true"
+              class="w-full bg-white rounded-2xl p-4 shadow-sm card-hover text-left"
+            >
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                  <div
+                    class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center"
+                  >
+                    <i class="fas fa-tags text-blue-600"></i>
+                  </div>
+                  <span class="font-medium text-gray-800">Kelola Kategori</span>
+                </div>
+                <i class="fas fa-chevron-right text-gray-400"></i>
+              </div>
+            </button>
+
+            <button
+              @click="showSourceModal = true"
+              class="w-full bg-white rounded-2xl p-4 shadow-sm card-hover text-left"
+            >
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                  <div
+                    class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center"
+                  >
+                    <i class="fas fa-wallet text-green-600"></i>
+                  </div>
+                  <span class="font-medium text-gray-800"
+                    >Kelola Sumber Dana</span
+                  >
+                </div>
+                <i class="fas fa-chevron-right text-gray-400"></i>
+              </div>
+            </button>
+            <button
+              @click="showPasswordModal = true"
+              class="w-full bg-white rounded-2xl p-4 shadow-sm card-hover text-left"
+            >
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                  <div
+                    class="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center"
+                  >
+                    <i class="fas fa-key text-purple-600"></i>
+                  </div>
+                  <span class="font-medium text-gray-800">Ganti Password</span>
+                </div>
+                <i class="fas fa-chevron-right text-gray-400"></i>
+              </div>
+            </button>
+
+            <div class="w-full bg-white rounded-2xl p-4 shadow-sm card-hover">
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center space-x-3">
+                  <div
+                    class="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center"
+                  >
+                    <i class="fas fa-moon text-yellow-600"></i>
+                  </div>
+                  <span class="font-medium text-gray-800">Dark Mode</span>
+                </div>
+              </div>
+              <div class="flex justify-center">
+                <button
+                  @click="toggleTheme()"
+                  class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-white w-full rounded-xl p-4 flex items-center justify-between shadow-sm"
+                >
+                  <div class="flex items-center space-x-3">
+                    <div
+                      class="w-10 h-10 rounded-full flex items-center justify-center"
+                      :class="isDarkMode ? 'bg-blue-900' : 'bg-yellow-100'"
+                    >
+                      <template x-if="isDarkMode">
+                        <svg
+                          class="w-6 h-6 text-blue-200"
+                          fill="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 01-4.4 2.26 5.403 5.403 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"
+                          ></path>
+                        </svg>
+                      </template>
+                      <template x-if="!isDarkMode">
+                        <svg
+                          class="w-6 h-6 text-yellow-500"
+                          fill="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            d="M12 7a5 5 0 100 10 5 5 0 000-10zM12 2a1 1 0 011 1v2a1 1 0 11-2 0V3a1 1 0 011-1zM12 19a1 1 0 011 1v2a1 1 0 11-2 0v-2a1 1 0 011-1zM4.929 4.929a1 1 0 011.414 0l1.414 1.414a1 1 0 01-1.414 1.414L4.93 6.343a1 1 0 010-1.414zM17.657 17.657a1 1 0 011.414 0l1.414 1.414a1 1 0 01-1.414 1.414l-1.414-1.414a1 1 0 010-1.414zM2 12a1 1 0 011-1h2a1 1 0 110 2H3a1 1 0 01-1-1zM19 12a1 1 0 011-1h2a1 1 0 110 2h-2a1 1 0 01-1-1zM4.929 19.071a1 1 0 010-1.414l1.414-1.414a1 1 0 111.414 1.414l-1.414 1.414a1 1 0 01-1.414 0zM17.657 6.343a1 1 0 010-1.414l1.414-1.414a1 1 0 111.414 1.414L19.07 6.343a1 1 0 01-1.414 0z"
+                          ></path>
+                        </svg>
+                      </template>
+                    </div>
+                    <span
+                      class="font-medium"
+                      x-text="isDarkMode ? 'Dark Mode' : 'Light Mode'"
+                    ></span>
+                  </div>
+                  <div
+                    class="relative w-11 h-6 rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-300"
+                  >
+                    <div
+                      class="absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 transition-transform duration-300"
+                      :class="isDarkMode ? 'transform translate-x-5' : ''"
+                    ></div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <button
+              @click="logout"
+              class="w-full bg-white rounded-2xl p-4 shadow-sm card-hover text-left"
+            >
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                  <div
+                    class="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center"
+                  >
+                    <i class="fas fa-sign-out-alt text-red-600"></i>
+                  </div>
+                  <span class="font-medium text-gray-800">Keluar</span>
+                </div>
+                <i class="fas fa-chevron-right text-gray-400"></i>
+              </div>
+            </button>
+          </div>
+        </div>
+      </main>
+      <!-- Bottom Navigation -->
+      <div class="stage">
+        <nav class="modern-navbar">
+          <ul>
+            <li
+              class="home"
+              :class="{ active: activeTab === 'home' }"
+              @click="setActiveTab('home')"
+              data-where="home"
+            >
+              <div class="flex flex-col items-center">
+                <span class="material-icons-outlined nav-icon">home</span>
+                <span class="nav-text">Home</span>
+              </div>
+            </li>
+            <li
+              class="add"
+              :class="{ active: activeTab === 'add' }"
+              @click="isAuthenticated && (showAddModal = true, setActiveTab('add'))"
+              data-where="add"
+            >
+              <div class="flex flex-col items-center">
+                <span class="material-icons-outlined nav-icon">add</span>
+                <span class="nav-text">Add</span>
+              </div>
+            </li>
+
+            <li
+              class="reports"
+              :class="{ active: activeTab === 'reports' }"
+              @click="setActiveTab('reports')"
+              data-where="reports"
+            >
+              <div class="flex flex-col items-center">
+                <span class="material-icons-outlined nav-icon">assessment</span>
+                <span class="nav-text">Reports</span>
+              </div>
+            </li>
+
+            <li class="follow"></li>
+          </ul>
+        </nav>
+      </div>
+    </div>
+
+    <!-- Add Expense Modal -->
+    <div x-show="showAddModal" class="fixed inset-0 z-50" style="display: none">
+      <div
+        class="absolute inset-0 bg-black bg-opacity-50"
+        @click="closeAddModal()"
+      ></div>
+      <div
+        class="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl slide-up"
+        style="height: 60vh"
+      >
+        <div class="p-6 h-full overflow-y-auto">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-bold text-gray-800">
+              <span x-show="!editingExpense">Tambah Pengeluaran</span>
+              <span x-show="editingExpense">Edit Pengeluaran</span>
+            </h2>
+            <button
+              @click="closeAddModal()"
+              class="text-gray-500 hover:text-gray-700"
+            >
+              <i class="fas fa-times text-xl"></i>
+            </button>
+          </div>
+
+          <form @submit.prevent="submitExpense" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2"
+                >Judul</label
+              >
+              <input
+                type="text"
+                x-model="expenseForm.title"
+                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                placeholder="Contoh: Makan siang"
+                required
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2"
+                >Deskripsi</label
+              >
+              <textarea
+                x-model="expenseForm.description"
+                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                placeholder="Deskripsi opsional"
+                rows="2"
+              ></textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2"
+                  >Kategori</label
+                >
+                <select
+                  x-model="expenseForm.categoryId"
+                  class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                  required
+                >
+                  <option value="">Pilih Kategori</option>
+                  <template x-for="category in categories" :key="category.id">
+                    <option
+                      :value="category.id"
+                      x-text="category.icon + ' ' + category.name"
+                    ></option>
+                  </template>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2"
+                  >Sumber Dana</label
+                >
+                <select
+                  x-model="expenseForm.sourceId"
+                  class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                  required
+                >
+                  <option value="">Pilih Sumber</option>
+                  <template x-for="source in sources" :key="source.id">
+                    <option
+                      :value="source.id"
+                      x-text="source.icon + ' ' + source.name"
+                    ></option>
+                  </template>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2"
+                  >Jumlah</label
+                >
+                <input
+                  type="number"
+                  step="0.01"
+                  x-model="expenseForm.amount"
+                  class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                  placeholder="0"
+                  required
+                />
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2"
+                  >Tanggal</label
+                >
+                <input
+                  type="date"
+                  x-model="expenseForm.date"
+                  class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                  required
+                />
+              </div>
+            </div>
+
+            <div class="flex space-x-3 pt-4">
+              <button
+                type="button"
+                @click="closeAddModal()"
+                class="flex-1 py-3 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50"
+              >
+                Batal
+              </button>
+
+              <button
+                type="submit"
+                :disabled="loading"
+                class="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 disabled:opacity-50"
+              >
+                <span x-show="!editingExpense && !loading">Simpan</span>
+                <span x-show="editingExpense && !loading">Update</span>
+                <span x-show="loading">Loading...</span>
+              </button>
+
+              <button
+                x-show="editingExpense"
+                type="button"
+                @click="deleteExpense(editingExpense.id)"
+                class="px-4 py-3 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700"
+              >
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    <!-- Budget Modal -->
+    <div
+      x-show="showBudgetModal"
+      class="fixed inset-0 z-50"
+      style="display: none"
+    >
+      <div
+        class="absolute inset-0 bg-black bg-opacity-50"
+        @click="showBudgetModal = false"
+      ></div>
+      <div
+        class="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl slide-up p-6"
+      >
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-xl font-bold text-gray-800">Set Budget Bulanan</h2>
+          <button
+            @click="showBudgetModal = false"
+            class="text-gray-500 hover:text-gray-700"
+          >
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
+
+        <form @submit.prevent="saveBudget" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2"
+              >Budget untuk bulan ini</label
+            >
+            <input
+              type="number"
+              step="0.01"
+              x-model="budgetForm.amount"
+              class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
+              placeholder="0"
+              required
+            />
+          </div>
+
+          <div class="flex space-x-3 pt-4">
+            <button
+              type="button"
+              @click="showBudgetModal = false"
+              class="flex-1 py-3 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50"
+            >
+              Batal
+            </button>
+
+            <button
+              type="submit"
+              :disabled="loading"
+              class="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 disabled:opacity-50"
+            >
+              <span x-show="!loading">Simpan</span>
+              <span x-show="loading">Loading...</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Category Management Modal -->
+    <div
+      x-show="showCategoryModal"
+      class="fixed inset-0 z-50"
+      style="display: none"
+    >
+      <div
+        class="absolute inset-0 bg-black bg-opacity-50"
+        @click="showCategoryModal = false"
+      ></div>
+      <div
+        class="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl slide-up"
+        style="height: 70vh"
+      >
+        <div class="p-6 h-full flex flex-col">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-bold text-gray-800">Kelola Kategori</h2>
+            <button
+              @click="showCategoryModal = false"
+              class="text-gray-500 hover:text-gray-700"
+            >
+              <i class="fas fa-times text-xl"></i>
+            </button>
+          </div>
+
+          <!-- Add Category Form -->
+          <form @submit.prevent="saveCategory" class="space-y-4 mb-6">
+            <div class="grid grid-cols-3 gap-3">
+              <div class="col-span-2">
+                <input
+                  type="text"
+                  x-model="categoryForm.name"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Nama kategori"
+                  required
+                />
+              </div>
+              <div>
+                <input
+                  type="text"
+                  x-model="categoryForm.icon"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-center"
+                  placeholder="🏷️"
+                  maxlength="2"
+                />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-6 gap-2">
+              <template
+                x-for="color in ['#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EC4899']"
+              >
+                <button
+                  type="button"
+                  @click="categoryForm.color = color"
+                  class="w-8 h-8 rounded-full border-2"
+                  :class="categoryForm.color === color ? 'border-gray-800' : 'border-gray-300'"
+                  :style="`background-color: ${color}`"
+                ></button>
+              </template>
+            </div>
+
+            <button
+              type="submit"
+              :disabled="loading"
+              class="w-full py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50"
+            >
+              <span x-show="!editingCategory && !loading">Tambah Kategori</span>
+              <span x-show="editingCategory && !loading">Update Kategori</span>
+              <span x-show="loading">Loading...</span>
+            </button>
+          </form>
+
+          <!-- Categories List -->
+          <div class="flex-1 overflow-y-auto space-y-2">
+            <template x-for="category in categories" :key="category.id">
+              <div
+                class="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+              >
+                <div class="flex items-center space-x-3">
+                  <div
+                    class="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm"
+                    :style="`background-color: ${category.color}`"
+                    x-text="category.icon"
+                  ></div>
+                  <span class="font-medium" x-text="category.name"></span>
+                </div>
+                <div class="flex space-x-2">
+                  <button
+                    @click="editCategory(category)"
+                    class="text-indigo-600 hover:text-indigo-800"
+                  >
+                    <i class="fas fa-edit"></i>
+                  </button>
+                  <button
+                    @click="deleteCategory(category.id)"
+                    class="text-red-600 hover:text-red-800"
+                  >
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Source Management Modal -->
+    <div
+      x-show="showSourceModal"
+      class="fixed inset-0 z-50"
+      style="display: none"
+    >
+      <div
+        class="absolute inset-0 bg-black bg-opacity-50"
+        @click="showSourceModal = false"
+      ></div>
+      <div
+        class="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl slide-up"
+        style="height: 70vh"
+      >
+        <div class="p-6 h-full flex flex-col">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-bold text-gray-800">Kelola Sumber Dana</h2>
+            <button
+              @click="showSourceModal = false"
+              class="text-gray-500 hover:text-gray-700"
+            >
+              <i class="fas fa-times text-xl"></i>
+            </button>
+          </div>
+
+          <!-- Add Source Form -->
+          <form @submit.prevent="saveSource" class="space-y-4 mb-6">
+            <div class="grid grid-cols-3 gap-3">
+              <div class="col-span-2">
+                <input
+                  type="text"
+                  x-model="sourceForm.name"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Nama sumber dana"
+                  required
+                />
+              </div>
+              <div>
+                <input
+                  type="text"
+                  x-model="sourceForm.icon"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-center"
+                  placeholder="💳"
+                  maxlength="2"
+                />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-6 gap-2">
+              <template
+                x-for="color in ['#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899']"
+              >
+                <button
+                  type="button"
+                  @click="sourceForm.color = color"
+                  class="w-8 h-8 rounded-full border-2"
+                  :class="sourceForm.color === color ? 'border-gray-800' : 'border-gray-300'"
+                  :style="`background-color: ${color}`"
+                ></button>
+              </template>
+            </div>
+
+            <button
+              type="submit"
+              :disabled="loading"
+              class="w-full py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50"
+            >
+              <span x-show="!editingSource && !loading">Tambah Sumber</span>
+              <span x-show="editingSource && !loading">Update Sumber</span>
+              <span x-show="loading">Loading...</span>
+            </button>
+          </form>
+
+          <!-- Sources List -->
+          <div class="flex-1 overflow-y-auto space-y-2">
+            <template x-for="source in sources" :key="source.id">
+              <div
+                class="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+              >
+                <div class="flex items-center space-x-3">
+                  <div
+                    class="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm"
+                    :style="`background-color: ${source.color}`"
+                    x-text="source.icon"
+                  ></div>
+                  <span class="font-medium" x-text="source.name"></span>
+                </div>
+                <div class="flex space-x-2">
+                  <button
+                    @click="editSource(source)"
+                    class="text-indigo-600 hover:text-indigo-800"
+                  >
+                    <i class="fas fa-edit"></i>
+                  </button>
+                  <button
+                    @click="deleteSource(source.id)"
+                    class="text-red-600 hover:text-red-800"
+                  >
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Password Change Modal -->
+    <div
+      x-show="showPasswordModal"
+      class="fixed inset-0 z-50"
+      style="display: none"
+    >
+      <div
+        class="absolute inset-0 bg-black bg-opacity-50"
+        @click="showPasswordModal = false"
+      ></div>
+      <div
+        class="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl slide-up p-6"
+      >
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-xl font-bold text-gray-800">Ganti Password</h2>
+          <button
+            @click="showPasswordModal = false"
+            class="text-gray-500 hover:text-gray-700"
+          >
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
+
+        <form @submit.prevent="changePassword" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2"
+              >Password Lama</label
+            >
+            <input
+              type="password"
+              x-model="passwordForm.current"
+              class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
+              required
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2"
+              >Password Baru</label
+            >
+            <input
+              type="password"
+              x-model="passwordForm.new"
+              class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
+              required
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2"
+              >Konfirmasi Password Baru</label
+            >
+            <input
+              type="password"
+              x-model="passwordForm.confirm"
+              class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
+              required
+            />
+          </div>
+
+          <div class="flex space-x-3 pt-4">
+            <button
+              type="button"
+              @click="showPasswordModal = false"
+              class="flex-1 py-3 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50"
+            >
+              Batal
+            </button>
+
+            <button
+              type="submit"
+              :disabled="loading"
+              class="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 disabled:opacity-50"
+            >
+              <span x-show="!loading">Simpan</span>
+              <span x-show="loading">Loading...</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <!-- Load JS files -->
+    <script src="js/utils.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>

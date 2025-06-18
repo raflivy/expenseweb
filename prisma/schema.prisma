@@ -1,0 +1,60 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  color     String    @default("#3B82F6")
+  icon      String    @default("💰")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  expenses  Expense[]
+
+  @@map("categories")
+}
+
+model Source {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  color     String    @default("#10B981")
+  icon      String    @default("🏦")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  expenses  Expense[]
+
+  @@map("sources")
+}
+
+model Expense {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  amount      Decimal  @db.Decimal(10, 2)
+  date        DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  categoryId  Int
+  sourceId    Int
+  category    Category @relation(fields: [categoryId], references: [id])
+  source      Source   @relation(fields: [sourceId], references: [id])
+
+  @@map("expenses")
+}
+
+model Budget {
+  id        Int      @id @default(autoincrement())
+  month     Int
+  year      Int
+  amount    Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([month, year])
+  @@map("budgets")
+}
