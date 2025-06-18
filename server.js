@@ -271,19 +271,31 @@ app.post("/api/login", async (req, res) => {
     const dbConnected = await testDatabaseConnection();
     if (!dbConnected) {
       return res.status(500).json({ error: "Database connection failed" });
+    }    const { password } = req.body;
+
+    // Get password hash from database or environment variable
+    let passwordHash = process.env.ADMIN_PASSWORD_HASH;
+    
+    try {
+      const storedConfig = await prisma.systemConfig.findUnique({
+        where: { key: 'ADMIN_PASSWORD_HASH' }
+      });
+      if (storedConfig) {
+        passwordHash = storedConfig.value;
+        console.log("Using password hash from database");
+      } else {
+        console.log("Using password hash from environment variable");
+      }
+    } catch (dbError) {
+      console.log("Database unavailable, using environment variable for password hash");
     }
 
-    const { password } = req.body;
-
-    if (!process.env.ADMIN_PASSWORD_HASH) {
-      console.error("ADMIN_PASSWORD_HASH not found in environment");
+    if (!passwordHash) {
+      console.error("ADMIN_PASSWORD_HASH not found in database or environment");
       return res.status(500).json({ error: "Server configuration error" });
     }
 
-    const isValid = await bcrypt.compare(
-      password,
-      process.env.ADMIN_PASSWORD_HASH
-    );
+    const isValid = await bcrypt.compare(password, passwordHash);
     if (isValid) {
       const token = generateAuthToken();
       await addToken(token);
@@ -317,47 +329,69 @@ app.post("/api/logout", async (req, res) => {
 app.post("/api/change-password", requireAuth, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
-    const isValid = await bcrypt.compare(
-      currentPassword,
-      process.env.ADMIN_PASSWORD_HASH
-    );
+    
+    // Get current password hash from database or environment variable
+    let currentPasswordHash = process.env.ADMIN_PASSWORD_HASH;
+    
+    try {
+      const storedConfig = await prisma.systemConfig.findUnique({
+        where: { key: 'ADMIN_PASSWORD_HASH' }
+      });
+      if (storedConfig) {
+        currentPasswordHash = storedConfig.value;
+      }
+    } catch (dbError) {
+      console.log("Using environment variable for password hash");
+    }
+
+    const isValid = await bcrypt.compare(currentPassword, currentPasswordHash);
 
     if (isValid) {
       const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-      // Update .env file dengan password baru
-      const fs = require("fs");
-      const path = require("path");
-
       try {
-        const envPath = path.join(__dirname, ".env");
-        let envContent = fs.readFileSync(envPath, "utf8");
+        // Store password hash in database for production deployment
+        await prisma.systemConfig.upsert({
+          where: { key: 'ADMIN_PASSWORD_HASH' },
+          update: { value: hashedPassword },
+          create: { key: 'ADMIN_PASSWORD_HASH', value: hashedPassword }
+        });
 
-        // Replace hash password di .env
-        const hashRegex = /ADMIN_PASSWORD_HASH="[^"]*"/;
-        envContent = envContent.replace(
-          hashRegex,
-          `ADMIN_PASSWORD_HASH="${hashedPassword}"`
-        );
-
-        // Tulis kembali ke file .env
-        fs.writeFileSync(envPath, envContent);
-
-        // Update environment variable di memory untuk session saat ini
-        process.env.ADMIN_PASSWORD_HASH = hashedPassword;
-
-        console.log("✅ Password successfully updated");
+        console.log("✅ Password successfully updated in database");
         res.json({
           success: true,
-          message:
-            "Password changed successfully. Please restart the server for full effect.",
+          message: "Password changed successfully!"
         });
-      } catch (fileError) {
-        console.error("❌ Failed to update .env file:", fileError);
-        res.status(500).json({
-          error:
-            "Password hash generated but failed to persist. Please restart server.",
-        });
+      } catch (dbError) {
+        console.error("❌ Failed to update password in database:", dbError);
+        
+        // Fallback: try to update .env file (for local development)
+        try {
+          const fs = require("fs");
+          const path = require("path");
+          const envPath = path.join(__dirname, ".env");
+          let envContent = fs.readFileSync(envPath, "utf8");
+
+          const hashRegex = /ADMIN_PASSWORD_HASH="[^"]*"/;
+          envContent = envContent.replace(
+            hashRegex,
+            `ADMIN_PASSWORD_HASH="${hashedPassword}"`
+          );
+
+          fs.writeFileSync(envPath, envContent);
+          process.env.ADMIN_PASSWORD_HASH = hashedPassword;
+
+          console.log("✅ Password updated in .env file (development mode)");
+          res.json({
+            success: true,
+            message: "Password changed successfully. Please restart the server for full effect."
+          });
+        } catch (fileError) {
+          console.error("❌ Failed to update both database and .env file:", fileError);
+          res.status(500).json({
+            error: "Failed to save password changes. Please contact administrator."
+          });
+        }
       }
     } else {
       res.status(401).json({ error: "Current password is incorrect" });
