@@ -77,49 +77,28 @@ function expenseTracker() {
 
     // Initialization
     async init() {
-      try {
-        console.log("ExpenseTracker init started");
-        // Load saved theme
-        this.loadTheme();
-        console.log("Theme loaded"); // Check if already authenticated
-        try {
-          // First check session status
-          const sessionResponse = await fetch("/api/session");
-          const sessionData = await sessionResponse.json();
-          console.log("Initial session check:", sessionData);
+      console.log("Initializing expense tracker...");
+      await this.checkSession();
+      this.loadTheme();
+    },
 
-          if (sessionData.authenticated) {
-            console.log("User authenticated via session");
-            this.isAuthenticated = true;
-            await this.loadData();
-          } else {
-            // Fallback: try to access protected endpoint
-            const response = await fetch("/api/expenses");
-            if (response.ok) {
-              console.log("User authenticated via expenses endpoint");
-              this.isAuthenticated = true;
-              await this.loadData();
-            } else {
-              console.log("User not authenticated");
-              this.isAuthenticated = false;
-            }
-          }
-        } catch (authError) {
+    async checkSession() {
+      try {
+        const response = await fetch("/api/session", {
+          credentials: "include",
+        });
+        const data = await response.json();
+
+        if (data.authenticated) {
+          this.isAuthenticated = true;
+          await this.loadData();
+        } else {
           this.isAuthenticated = false;
         }
       } catch (error) {
-        console.error("Init error:", error);
-        this.error = "Error initializing app: " + error.message;
+        console.error("Session check failed:", error);
+        this.isAuthenticated = false;
       }
-
-      // Set default date
-      this.expenseForm.date = new Date().toISOString().split("T")[0];
-
-      // Set date filter defaults
-      const today = new Date();
-      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-      this.dateFilter.start = firstDay.toISOString().split("T")[0];
-      this.dateFilter.end = today.toISOString().split("T")[0];
     },
 
     // Authentication methods
@@ -133,6 +112,7 @@ function expenseTracker() {
           headers: {
             "Content-Type": "application/json",
           },
+          credentials: "include", // Important for sessions
           body: JSON.stringify({ password: this.password }),
         });
         const data = await response.json();
@@ -154,9 +134,11 @@ function expenseTracker() {
         this.loading = false;
       }
     },
-
     async logout() {
-      await fetch("/api/logout", { method: "POST" });
+      await fetch("/api/logout", {
+        method: "POST",
+        credentials: "include",
+      });
       this.isAuthenticated = false;
       this.expenses = [];
       this.categories = [];
@@ -836,7 +818,6 @@ function expenseTracker() {
       }
       return true;
     },
-
     // Protected API call wrapper
     async apiCall(url, options = {}) {
       if (!this.requireAuth()) {
@@ -844,7 +825,13 @@ function expenseTracker() {
       }
 
       try {
-        const response = await fetch(url, options);
+        // Ensure credentials are included
+        const defaultOptions = {
+          credentials: "include",
+          ...options,
+        };
+
+        const response = await fetch(url, defaultOptions);
 
         // Check if session expired
         if (response.status === 401) {
