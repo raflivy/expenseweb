@@ -2,7 +2,33 @@ function expenseTracker() {
   return {
     // Authentication
     isAuthenticated: false,
-    authToken: localStorage.getItem("authToken") || null,
+    _authToken: localStorage.getItem("authToken") || null,
+
+    // Getter dan setter untuk authToken yang selalu sync dengan localStorage
+    get authToken() {
+      // Selalu ambil dari localStorage untuk memastikan konsistensi
+      const stored = localStorage.getItem("authToken");
+      if (stored !== this._authToken) {
+        console.log("🔄 Token mismatch detected, syncing from localStorage");
+        this._authToken = stored;
+      }
+      return this._authToken;
+    },
+
+    set authToken(value) {
+      this._authToken = value;
+      if (value) {
+        localStorage.setItem("authToken", value);
+        console.log(
+          "✅ Token saved to localStorage:",
+          value.substring(0, 20) + "..."
+        );
+      } else {
+        localStorage.removeItem("authToken");
+        console.log("🗑️ Token removed from localStorage");
+      }
+    },
+
     password: "",
     loading: false,
     error: "",
@@ -74,16 +100,76 @@ function expenseTracker() {
     monthlyChart: null,
 
     // Theme settings
-    isDarkMode: false,
-
-    // Initialization
+    isDarkMode: false, // Initialization
     async init() {
-      console.log("Initializing expense tracker...");
+      console.log("=== INITIALIZING EXPENSE TRACKER ===");
+      console.log(
+        "Initial authToken from localStorage:",
+        localStorage.getItem("authToken")
+          ? localStorage.getItem("authToken").substring(0, 20) + "..."
+          : "null"
+      );
+      console.log("Initial isAuthenticated:", this.isAuthenticated);
+      console.log(
+        "Initial authToken via getter:",
+        this.authToken ? this.authToken.substring(0, 20) + "..." : "null"
+      );
+
+      // Pastikan token tersync
+      if (this.authToken) {
+        this.isAuthenticated = true;
+        console.log("🔑 Token found, setting isAuthenticated to true");
+      }
+
       await this.checkAuth();
       this.loadTheme();
-    },    // Check authentication status on app load (no timeout, persistent until logout)
+
+      console.log("=== INITIALIZATION COMPLETE ===");
+      console.log("Final isAuthenticated:", this.isAuthenticated);
+      console.log(
+        "Final authToken:",
+        this.authToken ? this.authToken.substring(0, 20) + "..." : "null"
+      );
+
+      // Monitoring token untuk debugging
+      setInterval(() => {
+        const currentToken = this.authToken;
+        const storageToken = localStorage.getItem("authToken");
+        if (
+          (currentToken && !storageToken) ||
+          (!currentToken && storageToken)
+        ) {
+          console.warn("⚠️ TOKEN SYNC ISSUE DETECTED:");
+          console.warn(
+            "Alpine token:",
+            currentToken ? currentToken.substring(0, 20) + "..." : "null"
+          );
+          console.warn(
+            "Storage token:",
+            storageToken ? storageToken.substring(0, 20) + "..." : "null"
+          );
+        }
+      }, 5000); // Check every 5 seconds
+    }, // Check authentication status on app load (no timeout, persistent until logout)
     async checkAuth() {
-      console.log("Checking authentication status...");
+      console.log("=== CHECKING AUTHENTICATION ===");
+      console.log(
+        "Current authToken in memory:",
+        this.authToken ? this.authToken.substring(0, 20) + "..." : "null"
+      );
+      console.log(
+        "Current localStorage token:",
+        localStorage.getItem("authToken")
+          ? localStorage.getItem("authToken").substring(0, 20) + "..."
+          : "null"
+      );
+
+      // Always sync with localStorage first
+      const storedToken = localStorage.getItem("authToken");
+      if (storedToken && storedToken !== this.authToken) {
+        console.log("Syncing token from localStorage to memory");
+        this.authToken = storedToken;
+      }
 
       if (!this.authToken) {
         console.log("No token found, user not authenticated");
@@ -100,12 +186,10 @@ function expenseTracker() {
         });
 
         if (!response.ok) {
-          console.log("Auth check response not ok:", response.status);
-          // If it's 401, clear the token
+          console.log("Auth check response not ok:", response.status); // If it's 401, clear the token
           if (response.status === 401) {
             console.log("Token invalid, clearing authentication");
-            this.authToken = null;
-            localStorage.removeItem("authToken");
+            this.authToken = null; // Menggunakan setter
           }
           this.isAuthenticated = false;
           return;
@@ -123,8 +207,7 @@ function expenseTracker() {
           console.log(
             "Token invalid according to server, clearing authentication"
           );
-          this.authToken = null;
-          localStorage.removeItem("authToken");
+          this.authToken = null; // Menggunakan setter
           this.isAuthenticated = false;
         }
       } catch (error) {
@@ -132,6 +215,13 @@ function expenseTracker() {
         // Don't clear token on network errors, just set as not authenticated for now
         this.isAuthenticated = false;
       }
+
+      console.log("=== AUTH CHECK COMPLETE ===");
+      console.log("Final isAuthenticated:", this.isAuthenticated);
+      console.log(
+        "Final authToken:",
+        this.authToken ? this.authToken.substring(0, 20) + "..." : "null"
+      );
     },
 
     // Authentication methods
@@ -149,8 +239,8 @@ function expenseTracker() {
         });
         const data = await response.json();
         if (response.ok && data.success) {
-          this.authToken = data.token;
-          localStorage.setItem("authToken", data.token);
+          console.log("🎉 Login successful, setting token...");
+          this.authToken = data.token; // Menggunakan setter
           this.isAuthenticated = true;
           this.password = "";
           console.log(
@@ -161,7 +251,7 @@ function expenseTracker() {
           // Load data directly without requireAuth check since we just logged in
           await this.loadDataAfterLogin();
           notifications.success(
-            "Login berhasil! Token akan tetap aktif hingga logout."
+            "Login berhasil!"
           );
         } else {
           this.error = data.error || "Login failed";
@@ -190,15 +280,16 @@ function expenseTracker() {
           console.error("Logout request failed:", error);
         }
       }
-      this.authToken = null;
-      localStorage.removeItem("authToken");
+      console.log("🚪 Logging out...");
+      this.authToken = null; // Menggunakan setter
       this.isAuthenticated = false;
       this.expenses = [];
       this.categories = [];
       this.sources = [];
       notifications.success("Logout berhasil!");
-    },
-    async changePassword() {
+    },    async changePassword() {
+      if (!this.requireAuth()) return;
+      
       if (this.passwordForm.new !== this.passwordForm.confirm) {
         if (window.notifications) {
           notifications.error("Password baru tidak cocok");
@@ -209,18 +300,15 @@ function expenseTracker() {
       }
 
       this.loading = true;
-
-      try {
-        const response = await fetch("/api/change-password", {
+      try {        const response = await this.apiCall("/api/change-password", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
           body: JSON.stringify({
             currentPassword: this.passwordForm.current,
             newPassword: this.passwordForm.new,
           }),
         });
+
+        if (!response) return; // apiCall already handled the error
 
         const data = await response.json();
 
@@ -240,7 +328,9 @@ function expenseTracker() {
           );
           if (shouldRestart) {
             try {
-              await fetch("/api/restart", { method: "POST" });
+              await this.apiCall("/api/restart", {
+                method: "POST",
+              });
               if (window.notifications) {
                 notifications.info("Server akan restart dalam 2 detik...");
               }
@@ -284,7 +374,8 @@ function expenseTracker() {
 
       this.calculateSummaries();
       this.updateChart();
-    },    async loadDataAfterLogin() {
+    },
+    async loadDataAfterLogin() {
       console.log("Loading data after successful login...");
       try {
         console.log("Starting to load all data...");
@@ -299,17 +390,20 @@ function expenseTracker() {
         this.calculateSummaries();
         this.updateChart();
         console.log("Data loaded successfully after login");
-        
+
         // Verify we're still authenticated after loading data
         if (!this.isAuthenticated) {
-          console.error("Authentication lost during data loading - this shouldn't happen");
+          console.error(
+            "Authentication lost during data loading - this shouldn't happen"
+          );
           notifications.error("Sesi terputus, silakan login kembali");
         }
       } catch (error) {
         console.error("Error loading data after login:", error);
         notifications.error("Gagal memuat data, silakan refresh halaman");
       }
-    },    async loadExpenses() {
+    },
+    async loadExpenses() {
       console.log("Loading expenses...");
       const response = await this.apiCall("/api/expenses");
       if (response && response.ok) {
@@ -318,7 +412,8 @@ function expenseTracker() {
       } else {
         console.error("Failed to load expenses, response:", response?.status);
       }
-    },    async loadCategories() {
+    },
+    async loadCategories() {
       console.log("Loading categories...");
       const response = await this.apiCall("/api/categories");
       if (response && response.ok) {
@@ -358,15 +453,13 @@ function expenseTracker() {
           ? `/api/expenses/${this.editingExpense.id}`
           : "/api/expenses";
         const method = this.editingExpense ? "PUT" : "POST";
-
-        const response = await fetch(url, {
+        
+        const response = await this.apiCall(url, {
           method: method,
-          headers: {
-            "Content-Type": "application/json",
-          },
           body: JSON.stringify(this.expenseForm),
         });
-        if (response.ok) {
+        
+        if (response && response.ok) {
           await this.loadExpenses();
           this.calculateSummaries();
           this.updateChart();
@@ -376,7 +469,7 @@ function expenseTracker() {
               ? "Pengeluaran berhasil diperbarui!"
               : "Pengeluaran berhasil ditambahkan!"
           );
-        } else {
+        } else if (response) {
           const data = await response.json();
           notifications.error(data.error || "Gagal menyimpan pengeluaran");
         }
@@ -443,7 +536,7 @@ function expenseTracker() {
 
       try {
         const now = new Date();
-        const response = await fetch("/api/budget", {
+        const response = await this.apiCall("/api/budget", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -478,19 +571,14 @@ function expenseTracker() {
           ? `/api/categories/${this.editingCategory.id}`
           : "/api/categories";
         const method = this.editingCategory ? "PUT" : "POST";
-
-        const response = await fetch(url, {
+        
+        const response = await this.apiCall(url, {
           method: method,
-          headers: {
-            "Content-Type": "application/json",
-          },
           body: JSON.stringify(this.categoryForm),
-        });
-
-        if (response.ok) {
+        });        if (response && response.ok) {
           await this.loadCategories();
           this.resetCategoryForm();
-        } else {
+        } else if (response) {
           const data = await response.json();
           alert(data.error || "Gagal menyimpan kategori");
         }
@@ -503,16 +591,14 @@ function expenseTracker() {
 
     async deleteCategory(id) {
       if (!this.requireAuth()) return;
-      if (!confirm("Hapus kategori ini?")) return;
-
-      try {
-        const response = await fetch(`/api/categories/${id}`, {
+      if (!confirm("Hapus kategori ini?")) return;      try {
+        const response = await this.apiCall(`/api/categories/${id}`, {
           method: "DELETE",
         });
-
-        if (response.ok) {
+        
+        if (response && response.ok) {
           await this.loadCategories();
-        } else {
+        } else if (response) {
           alert("Gagal menghapus kategori");
         }
       } catch (error) {
@@ -547,20 +633,13 @@ function expenseTracker() {
         const url = this.editingSource
           ? `/api/sources/${this.editingSource.id}`
           : "/api/sources";
-        const method = this.editingSource ? "PUT" : "POST";
-
-        const response = await fetch(url, {
+        const method = this.editingSource ? "PUT" : "POST";        const response = await this.apiCall(url, {
           method: method,
-          headers: {
-            "Content-Type": "application/json",
-          },
           body: JSON.stringify(this.sourceForm),
-        });
-
-        if (response.ok) {
+        });        if (response && response.ok) {
           await this.loadSources();
           this.resetSourceForm();
-        } else {
+        } else if (response) {
           const data = await response.json();
           alert(data.error || "Gagal menyimpan sumber dana");
         }
@@ -573,16 +652,14 @@ function expenseTracker() {
 
     async deleteSource(id) {
       if (!this.requireAuth()) return;
-      if (!confirm("Hapus sumber dana ini?")) return;
-
-      try {
-        const response = await fetch(`/api/sources/${id}`, {
+      if (!confirm("Hapus sumber dana ini?")) return;      try {
+        const response = await this.apiCall(`/api/sources/${id}`, {
           method: "DELETE",
         });
-
-        if (response.ok) {
+        
+        if (response && response.ok) {
           await this.loadSources();
-        } else {
+        } else if (response) {
           alert("Gagal menghapus sumber dana");
         }
       } catch (error) {
@@ -754,8 +831,7 @@ function expenseTracker() {
             endDate: this.dateFilter.end,
           });
 
-          const response = await fetch(`/api/expenses?${params}`);
-          if (response.ok) {
+          const response = await this.apiCall(`/api/expenses?${params}`);          if (response && response.ok) {
             this.expenses = await response.json();
           }
         } catch (error) {
@@ -890,39 +966,103 @@ function expenseTracker() {
       }
     }, // Authentication protection (silent, no annoying notifications)
     requireAuth() {
-      if (!this.isAuthenticated) {
+      console.log("=== REQUIRE AUTH DEBUG ===");
+      console.log("isAuthenticated:", this.isAuthenticated);
+      console.log(
+        "authToken:",
+        this.authToken ? this.authToken.substring(0, 20) + "..." : "null"
+      );
+      console.log(
+        "localStorage authToken:",
+        localStorage.getItem("authToken")
+          ? localStorage.getItem("authToken").substring(0, 20) + "..."
+          : "null"
+      );
+
+      // Check if token exists in localStorage but not in memory
+      if (!this.authToken && localStorage.getItem("authToken")) {
+        console.log("Restoring token from localStorage");
+        this.authToken = localStorage.getItem("authToken");
+        this.isAuthenticated = true;
+      }
+
+      if (!this.isAuthenticated || !this.authToken) {
         console.warn("Access denied: Authentication required");
         // Don't show notification, just silently return false
         return false;
       }
       return true;
-    },    // Protected API call wrapper
+    },
+
+    // Protected API call wrapper
     async apiCall(url, options = {}) {
+      console.log("=== API CALL DEBUG ===");
+      console.log("URL:", url);
+      console.log("isAuthenticated:", this.isAuthenticated);
+      console.log("authToken exists:", !!this.authToken);
+      console.log(
+        "authToken value:",
+        this.authToken ? this.authToken.substring(0, 20) + "..." : "null"
+      );
+      console.log(
+        "localStorage token:",
+        localStorage.getItem("authToken")
+          ? localStorage.getItem("authToken").substring(0, 20) + "..."
+          : "null"
+      );
+
+      // Critical fix: Always sync token from localStorage if missing
+      const storedToken = localStorage.getItem("authToken");
+      if (!this.authToken && storedToken) {
+        console.log(
+          "🔧 FIXING: Token missing from Alpine state, restoring from localStorage"
+        );
+        this.authToken = storedToken;
+        this.isAuthenticated = true;
+      }
+
       if (!this.requireAuth()) {
         console.error("API call blocked: not authenticated");
         return null;
       }
-      
-      console.log("Making API call to:", url);
-      
+
+      // Double check before making request
+      if (!this.authToken) {
+        console.error("❌ CRITICAL: No auth token available for API call");
+        return null;
+      }
+
+      console.log(
+        "Making API call to:",
+        url,
+        "with token:",
+        this.authToken.substring(0, 20) + "..."
+      );
+
       try {
         // Add auth token to headers
         const defaultOptions = {
           headers: {
             "X-Auth-Token": this.authToken,
+            "Content-Type": "application/json",
             ...options.headers,
           },
           ...options,
         };
+
+        console.log(
+          "Request headers X-Auth-Token:",
+          defaultOptions.headers["X-Auth-Token"]
+            ? defaultOptions.headers["X-Auth-Token"].substring(0, 20) + "..."
+            : "MISSING"
+        );
+
         const response = await fetch(url, defaultOptions);
 
-        console.log("API response status:", response.status, "for", url);
-
-        // Check if token is invalid (only happens if token was manually revoked)
+        console.log("API response status:", response.status, "for", url); // Check if token is invalid (only happens if token was manually revoked)
         if (response.status === 401) {
           console.warn("Token invalid (401), logging out user");
-          this.authToken = null;
-          localStorage.removeItem("authToken");
+          this.authToken = null; // Menggunakan setter
           this.isAuthenticated = false;
           notifications.error("Sesi telah berakhir, silakan login kembali");
           return null;
